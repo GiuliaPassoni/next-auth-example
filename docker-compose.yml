@@ -1,13 +1,77 @@
 services:
-  authjs-docker-test:
-    build: .
-    environment:
-      - TEST_KEYCLOAK_USERNAME
-      - TEST_KEYCLOAK_PASSWORD
-      - AUTH_KEYCLOAK_ID
-      - AUTH_KEYCLOAK_SECRET
-      - AUTH_KEYCLOAK_ISSUER
-      - AUTH_SECRET="MohY0/2zSQw/psWEnejC2ka3Al0oifvY4YjOkUaFfnI="
-      - AUTH_URL=http://localhost:3000/auth
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    env_file:
+      - .env.local
     ports:
       - "3000:3000"
+      - "9229:9229"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:17
+    env_file:
+      - .env.local
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+#  minio:
+#    image: minio/minio
+#    command: server /data --console-address ":9001"
+#    env_file:
+#      - .env.local
+#    ports:
+#      - "9000:9000"
+#      - "9001:9001"
+#    volumes:
+#      - minio-data:/data
+#    healthcheck:
+#      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+#      interval: 30s
+#      timeout: 20s
+#      retries: 3
+#    networks:
+#      - app-network
+#
+#  # Optional: MinIO client for bucket setup
+#  minio-mc:
+#    image: minio/mc
+#    depends_on:
+#      minio:
+#        condition: service_healthy
+#    env_file:
+#      - .env.local
+#    entrypoint: >
+#      /bin/sh -c "
+#      until (/usr/bin/mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD}) do echo 'Waiting...' && sleep 1; done &&
+#      /usr/bin/mc mb local/nextauth --ignore-existing &&
+#      /usr/bin/mc policy set public local/nextauth
+#      "
+
+volumes:
+  postgres-data:
+  minio-data:
+
+networks:
+  app-network:
+    driver: bridge
